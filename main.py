@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
@@ -14,12 +15,16 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if SOURCE_CHAT_IDS != ["*"] and str(from_id) not in SOURCE_CHAT_IDS:
         return
 
+    # گرفتن زمان دقیق پیام به فرمت قابل خوندن
+    timestamp = update.message.date.strftime("%Y-%m-%d %H:%M:%S UTC")
+
     sender_info = (
         f"📩 پیام از:\n"
         f"نام: {from_user.full_name}\n"
         f"آیدی: {from_user.id}\n"
         f"یوزرنیم: @{from_user.username if from_user.username else 'ندارد'}\n"
-        f"گروه/چت: {from_chat.title or from_chat.full_name or from_chat.id}"
+        f"گروه/چت: {from_chat.title or from_chat.full_name or from_chat.id}\n"
+        f"⏰ زمان: {timestamp}"
     )
 
     for chat_id in DEST_CHAT_IDS:
