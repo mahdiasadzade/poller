@@ -1,22 +1,11 @@
 import os
-from fastapi import FastAPI
-import uvicorn
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-import asyncio
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DEST_CHAT_IDS = [int(x) for x in os.getenv("DEST_CHAT_IDS", "").split(",")]
 SOURCE_CHAT_IDS = os.getenv("SOURCE_CHAT_IDS", "*").split(",")
 
-app = FastAPI()
-
-# --- Route for Health Check / Web Service ---
-@app.get("/")
-def root():
-    return {"status": "Bot running"}
-
-# --- Telegram Bot Handler ---
 async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from_chat = update.effective_chat
     from_user = update.effective_user
@@ -43,21 +32,9 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_id=update.effective_message.message_id
         )
 
-
-# --- Run Telegram Bot in Background ---
-async def start_bot():
-    bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
-    bot_app.add_handler(MessageHandler(filters.ALL, forward_message))
-    print("Bot started (async, Web Service compatible)")
-    await bot_app.run_polling()
-
-# Start Telegram bot in the background
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(start_bot())
-
-# --- Run FastAPI Web Service ---
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(MessageHandler(filters.ALL, forward_message))
 
+    print("Bot started (async, Python 3.13 compatible)")
+    app.run_polling()
