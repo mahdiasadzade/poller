@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
@@ -15,8 +16,12 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if SOURCE_CHAT_IDS != ["*"] and str(from_id) not in SOURCE_CHAT_IDS:
         return
 
-    # گرفتن زمان دقیق پیام به فرمت قابل خوندن
-    timestamp = update.message.date.strftime("%Y-%m-%d %H:%M:%S UTC")
+    # زمان UTC
+    timestamp_utc = update.message.date.strftime("%Y-%m-%d %H:%M:%S UTC")
+    
+    # تبدیل به وقت ایران
+    timestamp_iran = update.message.date.replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("Asia/Tehran"))
+    timestamp_iran_str = timestamp_iran.strftime("%Y-%m-%d %H:%M:%S IRST")
 
     sender_info = (
         f"📩 پیام از:\n"
@@ -24,7 +29,8 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"آیدی: {from_user.id}\n"
         f"یوزرنیم: @{from_user.username if from_user.username else 'ندارد'}\n"
         f"گروه/چت: {from_chat.title or from_chat.full_name or from_chat.id}\n"
-        f"⏰ زمان: {timestamp}"
+        f"⏰ زمان (UTC): {timestamp_utc}\n"
+        f"⏰ زمان (ایران): {timestamp_iran_str}"
     )
 
     for chat_id in DEST_CHAT_IDS:
