@@ -16,6 +16,7 @@ app = FastAPI()
 def root():
     return {"status": "Bot running"}
 
+# --- Telegram Bot Handler ---
 async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from_chat = update.effective_chat
     from_user = update.effective_user
@@ -24,24 +25,15 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if SOURCE_CHAT_IDS != ["*"] and str(from_id) not in SOURCE_CHAT_IDS:
         return
 
-    sender_info = (
-        f"📩 پیام از:\n"
-        f"نام: {from_user.full_name}\n"
-        f"آیدی: {from_user.id}\n"
-        f"یوزرنیم: @{from_user.username if from_user.username else 'ندارد'}\n"
-        f"گروه/چت: {from_chat.title or from_chat.full_name or from_chat.id}"
-    )
+    sender_info = f"📩 پیام از:\nنام: {from_user.full_name}\nآیدی: {from_user.id}\nگروه/چت: {from_chat.title or from_chat.full_name or from_chat.id}"
 
     for chat_id in DEST_CHAT_IDS:
-        # اول info فرستنده
         await context.bot.send_message(chat_id=chat_id, text=sender_info)
-        # بعد پیام اصلی رو کپی کن
         await context.bot.copy_message(
             chat_id=chat_id,
             from_chat_id=from_id,
             message_id=update.effective_message.message_id
         )
-
 
 # --- Run Telegram Bot in Background ---
 async def start_bot():
@@ -59,4 +51,3 @@ async def startup_event():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
-
