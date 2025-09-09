@@ -1,112 +1,89 @@
-import os
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+import logging
+from telegram import Update, MessageEntity
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
 import jdatetime
-from telegram import Update, Message
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+import pytz
+import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-DEST_CHAT_IDS = [int(x) for x in os.getenv("DEST_CHAT_IDS", "").split(",")]
-SOURCE_CHAT_IDS = os.getenv("SOURCE_CHAT_IDS", "*").split(",")
+# فعال کردن لاگ برای دیباگ
+logging.basicConfig(level=logging.INFO)
 
-LOG_DIR = "logs"
-os.makedirs(LOG_DIR, exist_ok=True)
+# توکن ربات
+BOT_TOKEN = "توکن_اینجا"
 
-def iran_now():
-    return datetime.now(ZoneInfo("Asia/Tehran"))
+# آیدی چت مقصد
+DEST_CHAT_ID = -1001234567890  # جایگزین کن
 
-def save_daily_log():
-    """گزارش روزانه دیروز بسازه"""
-    yesterday = iran_now() - timedelta(days=1)
-    daily_content = ""
-    for file in os.listdir(LOG_DIR):
-        if file.endswith(f"{yesterday.strftime('%Y-%m-%d')}.txt"):
-            with open(os.path.join(LOG_DIR, file), "r", encoding="utf-8") as f:
-                daily_content += f.read() + "\n"
-    if daily_content:
-        daily_file = os.path.join(LOG_DIR, f"daily_log_{yesterday.strftime('%Y-%m-%d')}.txt")
-        with open(daily_file, "w", encoding="utf-8") as f:
-            f.write(daily_content)
-        print(f"Daily log saved: {daily_file}")
+# ساختار گزارش پیام
+async def build_report(message: Update.message) -> str:
+    user = message.from_user
+    chat = message.chat
 
-def get_message_type(message: Message):
-    if message.text:
-        return "متن"
-    elif message.photo:
-        return "عکس"
-    elif message.video:
-        return "ویدئو"
-    elif message.document:
-        return "فایل"
-    elif message.audio:
-        return "صوت"
-    elif message.voice:
-        return "ویس"
-    elif message.sticker:
-        return "استیکر"
-    elif message.video_note:
-        return "وینوته"
+    # تاریخ به وقت ایران و شمسی
+    iran_tz = pytz.timezone("Asia/Tehran")
+    now_tehran = jdatetime.datetime.now(iran_tz)
+    date_str = now_tehran.strftime("%Y/%m/%d %H:%M:%S")
+
+    # فیلدها
+    name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    user_id = user.id
+    username = f"@{user.username}" if user.username else "ندارد"
+    chat_title = chat.title if chat.title else "پی‌وی"
+    msg_type = message.effective_attachment.__class__.__name__ if message.effective_attachment else "متن"
+    client = message.via_bot.username if message.via_bot else "نامشخص"
+    reply_to = message.reply_to_message.from_user.first_name if message.reply_to_message else "ندارد"
+
+    # لینک پیام (فقط برای گروه/سوپرگروه با یوزرنیم عمومی)
+    if chat.username:
+        link = f"https://t.me/{chat.username}/{message.message_id}"
     else:
-        return "سایر"
+        link = "لینک ندارد"
 
-async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from_chat = update.effective_chat
-    from_user = update.effective_user
-    from_id = from_chat.id
-    message = update.effective_message
+    # متن پیام اگه متنی بود
+    text_part = ""
+    if message.text or message.caption:
+        text_part = f"\n📩 متن:\n{message.text or message.caption}"
 
-    if SOURCE_CHAT_IDS != ["*"] and str(from_id) not in SOURCE_CHAT_IDS:
+    report = (
+        f"📩 پیام از:\n"
+        f"👤 نام: {name}\n"
+        f"🆔 آیدی: {user_id}\n"
+        f"🔗 یوزرنیم: {username}\n"
+        f"👥 چت/گروه: {chat_title}\n"
+        f"📌 نوع پیام: {msg_type}"
+        f"{text_part}\n\n"
+        f"📱 کلاینت: {client}\n"
+        f"↩️ ریپلای به: {reply_to}\n"
+        f"🔗 لینک پیام: {link}\n"
+        f"🕒 تاریخ شمسی: {date_str}"
+    )
+    return report
+
+
+# هندلر پیام‌ها
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    if not message:
         return
 
-    iran_time = iran_now()
-    date_jalali = jdatetime.datetime.fromgregorian(datetime=iran_time).strftime("%Y/%m/%d")
-    time_str = iran_time.strftime("%H:%M:%S")
+    report = await build_report(message)
 
-    msg_type = get_message_type(message)
-    client_info = message.via_bot.name if message.via_bot else "نامعلوم"
-    reply_to = f"{message.reply_to_message.message_id}" if message.reply_to_message else "ندارد"
-    message_link = getattr(message, "link", "ندارد")
+    # اگر متن بود: فقط گزارش بفرسته
+    if message.text:
+        await context.bot.send_message(chat_id=DEST_CHAT_ID, text=report)
+    else:
+        # اگر غیرمتنی بود: گزارش + فوروارد پیام
+        await context.bot.send_message(chat_id=DEST_CHAT_ID, text=report)
+        await message.forward(chat_id=DEST_CHAT_ID)
 
-    # ساخت متن لاگ
-    log_parts = [
-        "📩 پیام از:",
-        f"👤 نام: {from_user.full_name}",
-        f"🆔 آیدی: {from_user.id}",
-        f"🔗 یوزرنیم: @{from_user.username if from_user.username else 'ندارد'}",
-        f"👥 چت/گروه: {from_chat.title or from_chat.full_name or from_chat.id}",
-        f"📌 نوع پیام: {msg_type}",
-    ]
 
-    if msg_type == "متن" and message.text:
-        log_parts.append(f"متن: {message.text}")
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
 
-    log_parts.extend([
-        f"📱 کلاینت: {client_info}",
-        f"↩️ ریپلای به: {reply_to}",
-        f"🔗 لینک پیام: {message_link}",
-        f"🕒 تاریخ شمسی: {date_jalali} | ساعت: {time_str}"
-    ])
+    app.add_handler(MessageHandler(filters.ALL, handle_message))
 
-    log_text = "\n".join(log_parts)
+    app.run_polling()
 
-    # فوروارد به چت مقصد
-    for chat_id in DEST_CHAT_IDS:
-        await context.bot.send_message(chat_id=chat_id, text=log_text)
-        await context.bot.copy_message(
-            chat_id=chat_id,
-            from_chat_id=from_id,
-            message_id=message.message_id
-        )
-
-    # ذخیره لاگ روی دیسک
-    log_file = os.path.join(LOG_DIR, f"{from_chat.title or from_chat.id}_{iran_time.strftime('%Y-%m-%d')}.txt")
-    with open(log_file, "a", encoding="utf-8") as f:
-        f.write(log_text + "\n\n")
 
 if __name__ == "__main__":
-    save_daily_log()  # گزارش روز قبل
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.ALL, forward_message))
-
-    print("Bot started (async, Python 3.13 compatible)")
-    app.run_polling()
+    main()
