@@ -9,10 +9,10 @@ import os
 logging.basicConfig(level=logging.INFO)
 
 # توکن ربات
-BOT_TOKEN = "توکن_اینجا"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # آیدی چت مقصد
-DEST_CHAT_ID = -1001234567890  # جایگزین کن
+DEST_CHAT_IDS = [int(x) for x in os.getenv("DEST_CHAT_IDS", "").split(",")]  # جایگزین کن
 
 # ساختار گزارش پیام
 async def build_report(message: Update.message) -> str:
@@ -87,3 +87,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
